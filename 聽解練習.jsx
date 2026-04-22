@@ -1,0 +1,297 @@
+import React, { useState } from 'react';
+
+// ==========================================
+// 🔴 老師請注意：請在這裡填入您的 GAS 網址
+// ==========================================
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwTD2Y1rdxCRx-s0dW6hqqLsLAHvII7v_vGyWRLr7njQ4583hFHsY3ikhcLValrCFMuYA/exec";
+
+// ==========================================
+// 🔴 老師請注意：請在這裡設定所有題目的正確答案 (1, 2, 3, 4)
+// ==========================================
+const correctAnswers = {
+  // Section 1（7題）
+  "1-1": 1, "1-2": 4, "1-3": 2, "1-4": 3, "1-5": 1, "1-6": 2, "1-7": 2,
+  // Section 2（2題）
+  "2-1": 3, "2-2": 1,
+  // Section 3（17題）
+  "3-1": 4, "3-2": 3, "3-3": 2, "3-4": 4, "3-5": 1,
+  "3-6": 2, "3-7": 2, "3-8": 2, "3-9": 3, "3-10": 3,
+  "3-11": 4, "3-12": 2, "3-13": 4, "3-14": 1, "3-15": 3,
+  "3-16": 1, "3-17": 1,
+};
+
+const TOTAL_QUESTIONS = 26;
+
+// 測驗資料結構
+const testData = [
+  {
+    sectionId: 1,
+    title: "セクション 1",
+    questions: [
+      { id: "1-1", image: "section1/截圖 2026-04-18 下午2.12.53.png" },
+      { id: "1-2", image: "section1/截圖 2026-04-18 下午2.12.59.png" },
+      { id: "1-3", image: "section1/截圖 2026-04-18 下午2.13.04.png" },
+      { id: "1-4", image: "section1/截圖 2026-04-18 下午2.13.10.png" },
+      { id: "1-5", image: "section1/截圖 2026-04-18 下午2.13.15.png" },
+      { id: "1-6", image: "section1/截圖 2026-04-18 下午2.17.31.png" },
+      { id: "1-7", image: "section1/截圖 2026-04-18 下午2.17.36.png" },
+    ]
+  },
+  {
+    sectionId: 2,
+    title: "セクション 2",
+    questions: [
+      { id: "2-1", image: "section2/截圖 2026-04-18 下午2.14.19.png" },
+      { id: "2-2", image: "section2/截圖 2026-04-18 下午2.14.23.png" },
+    ]
+  },
+  {
+    sectionId: 3,
+    title: "セクション 3",
+    questions: [
+      { id: "3-1",  image: "section3/截圖 2026-04-18 下午2.15.16.png" },
+      { id: "3-2",  image: "section3/截圖 2026-04-18 下午2.15.21.png" },
+      { id: "3-3",  image: "section3/截圖 2026-04-18 下午2.15.27.png" },
+      { id: "3-4",  image: "section3/截圖 2026-04-18 下午2.15.33.png" },
+      { id: "3-5",  image: "section3/截圖 2026-04-18 下午2.15.38.png" },
+      { id: "3-6",  image: "section3/截圖 2026-04-18 下午2.15.44.png" },
+      { id: "3-7",  image: "section3/截圖 2026-04-18 下午2.15.50.png" },
+      { id: "3-8",  image: "section3/截圖 2026-04-18 下午2.15.55.png" },
+      { id: "3-9",  image: "section3/截圖 2026-04-18 下午2.16.00.png" },
+      { id: "3-10", image: "section3/截圖 2026-04-18 下午2.16.06.png" },
+      { id: "3-11", image: "section3/截圖 2026-04-18 下午2.19.35.png" },
+      { id: "3-12", image: "section3/截圖 2026-04-18 下午2.19.41.png" },
+      { id: "3-13", image: "section3/截圖 2026-04-18 下午2.19.46.png" },
+      { id: "3-14", image: "section3/截圖 2026-04-18 下午2.19.51.png" },
+      { id: "3-15", image: "section3/截圖 2026-04-18 下午2.19.56.png" },
+      { id: "3-16", image: "section3/截圖 2026-04-18 下午2.20.02.png" },
+      { id: "3-17", image: "section3/截圖 2026-04-18 下午2.20.10.png" },
+    ]
+  }
+];
+
+export default function App() {
+  const [step, setStep] = useState('login'); // 'login', 'transition', 'question', 'submitting', 'completed'
+  const [studentInfo, setStudentInfo] = useState({ id: '', name: '' });
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setStudentInfo(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleStartTest = (e) => {
+    e.preventDefault();
+    if (!studentInfo.id.trim() || !studentInfo.name.trim()) {
+      alert("請輸入學號與姓名！");
+      return;
+    }
+    setStep('transition');
+  };
+
+  const handleStartSection = () => {
+    setStep('question');
+  };
+
+  // 傳送資料到 GAS
+  const submitResultsToGAS = async (finalAnswers) => {
+    setStep('submitting');
+    let correctCount = 0;
+    const details = {};
+
+    Object.keys(finalAnswers).forEach(qId => {
+      const studentAns = finalAnswers[qId];
+      const correctAns = correctAnswers[qId];
+      const isCorrect = studentAns === correctAns;
+      if (isCorrect) correctCount++;
+      details[qId] = {
+        studentAnswer: studentAns,
+        isCorrect: isCorrect
+      };
+    });
+
+    // 總分 100 分（共 26 題，四捨五入）
+    const score = Math.round(correctCount / TOTAL_QUESTIONS * 100);
+
+    const payload = {
+      studentId: studentInfo.id,
+      studentName: studentInfo.name,
+      score: score,
+      details: JSON.stringify(details)
+    };
+
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      setStep('completed');
+    } catch (error) {
+      console.error('上傳失敗:', error);
+      alert('成績上傳時發生錯誤，但您的作答已完成。');
+      setStep('completed');
+    }
+  };
+
+  const handleAnswer = (choice) => {
+    const currentSection = testData[currentSectionIndex];
+    const currentQuestion = currentSection.questions[currentQuestionIndex];
+
+    const updatedAnswers = {
+      ...answers,
+      [currentQuestion.id]: choice
+    };
+    setAnswers(updatedAnswers);
+
+    if (currentQuestionIndex < currentSection.questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      if (currentSectionIndex < testData.length - 1) {
+        setCurrentSectionIndex(prev => prev + 1);
+        setCurrentQuestionIndex(0);
+        setStep('transition');
+      } else {
+        submitResultsToGAS(updatedAnswers);
+      }
+    }
+  };
+
+  // ── ログイン画面 ──────────────────────────────
+  if (step === 'login') {
+    return (
+      <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.08)] w-full max-w-[600px] p-10 md:p-14">
+          <h1 className="text-4xl md:text-5xl font-black text-center text-[#2d3748] mb-12 tracking-wider">
+            聽解練習
+          </h1>
+          <form onSubmit={handleStartTest}>
+            <div className="mb-8">
+              <label className="block text-gray-700 text-lg font-bold mb-3">
+                學號 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text" name="id" value={studentInfo.id}
+                onChange={handleInputChange} placeholder="請輸入您的學號"
+                className="w-full border-2 border-gray-200 rounded-2xl px-5 py-4 text-lg focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all placeholder-gray-400"
+              />
+            </div>
+            <div className="mb-12">
+              <label className="block text-gray-700 text-lg font-bold mb-3">
+                姓名 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text" name="name" value={studentInfo.name}
+                onChange={handleInputChange} placeholder="請輸入您的姓名"
+                className="w-full border-2 border-gray-200 rounded-2xl px-5 py-4 text-lg focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all placeholder-gray-400"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-[#3b68e6] hover:bg-[#2f55c1] text-white font-bold text-xl py-5 rounded-2xl transition-colors duration-200 shadow-md shadow-blue-200"
+            >
+              開始測驗
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ── セクション切り替え画面 ────────────────────
+  if (step === 'transition') {
+    return (
+      <div className="min-h-screen bg-[#3b68e6] flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-12 max-w-lg w-full text-center shadow-2xl">
+          <h2 className="text-4xl font-bold text-gray-800 mb-4">
+            {testData[currentSectionIndex].title}
+          </h2>
+          <p className="text-gray-500 mb-10 text-lg">準備好後，請點擊下方按鈕開始本大題測驗。</p>
+          <button
+            onClick={handleStartSection}
+            className="bg-[#3b68e6] hover:bg-[#2f55c1] text-white font-bold text-2xl py-4 px-12 rounded-2xl transition-colors w-full"
+          >
+            開始
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 問題画面 ────────────────────────────────
+  if (step === 'question') {
+    const currentSection = testData[currentSectionIndex];
+    const currentQuestion = currentSection.questions[currentQuestionIndex];
+    return (
+      <div className="min-h-screen bg-gray-100 flex flex-col p-4 md:p-8">
+        <div className="flex justify-between items-center mb-6 px-4">
+          <div className="text-lg font-semibold text-gray-600">
+            {studentInfo.name} ({studentInfo.id})
+          </div>
+          <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-bold">
+            {currentSection.title} - 第 {currentQuestionIndex + 1} 題 / 共 {currentSection.questions.length} 題
+          </div>
+        </div>
+        <div className="flex-1 bg-white rounded-3xl shadow-sm mb-6 flex items-center justify-center p-4 overflow-hidden min-h-[40vh]">
+          {currentQuestion.image ? (
+            <img
+              src={`/${currentQuestion.image}`}
+              alt="測驗圖片"
+              className="max-w-full max-h-full object-contain rounded-xl"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = 'https://placehold.co/800x600/e2e8f0/475569?text=圖片載入失敗';
+              }}
+            />
+          ) : (
+            <div className="text-gray-400 text-xl">無圖片</div>
+          )}
+        </div>
+        <div className="grid grid-cols-4 gap-4 max-w-4xl mx-auto w-full">
+          {[1, 2, 3, 4].map((num) => (
+            <button
+              key={num}
+              onClick={() => handleAnswer(num)}
+              className="bg-white border-4 border-gray-200 hover:border-[#3b68e6] hover:bg-blue-50 text-gray-800 text-4xl md:text-5xl font-bold py-8 rounded-3xl shadow-sm transition-all duration-200 flex items-center justify-center cursor-pointer"
+            >
+              {num}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 送信中画面 ──────────────────────────────
+  if (step === 'submitting') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#3b68e6] mb-4"></div>
+        <h2 className="text-2xl font-bold text-gray-700">正在傳送您的答案至雲端，請稍候...</h2>
+      </div>
+    );
+  }
+
+  // ── 完了画面 ────────────────────────────────
+  if (step === 'completed') {
+    return (
+      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-12 max-w-lg w-full text-center shadow-xl">
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">測驗結束！</h2>
+          <p className="text-gray-600 mb-8 text-lg">
+            辛苦了，{studentInfo.name} 同學。您的答案已成功繳交！
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
